@@ -1,0 +1,238 @@
+/* ============================================================
+   style.css  —  Student Exam Scores Dashboard
+   Custom styles that complement Tailwind CSS utilities.
+   Tailwind handles layout & spacing; this file handles:
+     • Reusable component classes (.stat-card, .chart-card …)
+     • Animations (floating cap, loader spinner)
+     • Form input base styles (.filter-input)
+     • Table helpers (.th-cell, .td-cell, .table-row-hover)
+     • Score / health badge colour helpers
+   ============================================================ */
+
+/* ── Google Font fallback (already loaded via <link> in HTML) ── */
+body { font-family: 'Inter', system-ui, sans-serif; }
+
+/* ══════════════════════════════════════════════════
+   STAT / KPI CARDS
+   ══════════════════════════════════════════════════ */
+.stat-card {
+  border-radius: 1rem;           /* rounded-2xl */
+  padding: 1rem 1.25rem;
+  border: 1px solid rgba(0,0,0,.04);
+  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+  transition: transform .2s ease, box-shadow .2s ease;
+  cursor: default;
+}
+.stat-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 18px rgba(0,0,0,.09);
+}
+
+/* ══════════════════════════════════════════════════
+   CHART CARDS
+   ══════════════════════════════════════════════════ */
+.chart-card {
+  background: #ffffff;
+  border-radius: 1rem;
+  border: 1px solid #f1f5f9;
+  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+  padding: 1.25rem;
+  transition: box-shadow .2s ease;
+}
+.chart-card:hover {
+  box-shadow: 0 6px 20px rgba(0,0,0,.08);
+}
+.chart-title {
+  font-size: .9rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: .15rem;
+}
+.chart-subtitle {
+  font-size: .72rem;
+  color: #94a3b8;
+  margin-bottom: .9rem;
+}
+/* Fixed-height wrapper so Chart.js respects aspect ratio.
+   Taller on larger screens so data labels / scatter points have room. */
+.chart-wrap {
+  position: relative;
+  height: 240px;
+}
+@media (min-width: 640px) {
+  .chart-wrap { height: 260px; }
+}
+
+/* ══════════════════════════════════════════════════
+   FILTER INPUTS (shared by <input> and <select>)
+   ══════════════════════════════════════════════════ */
+.filter-input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: .625rem;
+  padding: .45rem .75rem;
+  font-size: .8rem;
+  color: #334155;
+  outline: none;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.filter-input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99,102,241,.12);
+}
+
+/* ══════════════════════════════════════════════════
+   TABLE
+   ══════════════════════════════════════════════════ */
+.th-cell {
+  padding: .6rem 1rem;
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.td-cell {
+  padding: .55rem 1rem;
+  color: #334155;
+  white-space: nowrap;
+}
+.table-row-hover {
+  transition: background-color .15s ease;
+}
+.table-row-hover:hover {
+  background-color: #f8fafc;
+}
+
+/* ══════════════════════════════════════════════════
+   BADGES  (gender, health, score)
+   ══════════════════════════════════════════════════ */
+.badge-pink {
+  display: inline-block;
+  padding: .15rem .55rem;
+  border-radius: 9999px;
+  background: #fce7f3;
+  color: #be185d;
+  font-size: .7rem;
+  font-weight: 600;
+}
+.badge-blue {
+  display: inline-block;
+  padding: .15rem .55rem;
+  border-radius: 9999px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: .7rem;
+  font-weight: 600;
+}
+
+/* Health badges – applied via Alpine :class binding */
+.badge-excellent { display:inline-block; padding:.15rem .55rem; border-radius:9999px; background:#d1fae5; color:#065f46; font-size:.7rem; font-weight:600; }
+.badge-good      { display:inline-block; padding:.15rem .55rem; border-radius:9999px; background:#dbeafe; color:#1e40af; font-size:.7rem; font-weight:600; }
+.badge-fair      { display:inline-block; padding:.15rem .55rem; border-radius:9999px; background:#fef9c3; color:#854d0e; font-size:.7rem; font-weight:600; }
+.badge-poor      { display:inline-block; padding:.15rem .55rem; border-radius:9999px; background:#fee2e2; color:#991b1b; font-size:.7rem; font-weight:600; }
+
+/* Score badges */
+.score-high   { display:inline-block; padding:.15rem .55rem; border-radius:9999px; background:#d1fae5; color:#065f46; font-size:.75rem; font-weight:700; }
+.score-mid    { display:inline-block; padding:.15rem .55rem; border-radius:9999px; background:#fef9c3; color:#854d0e; font-size:.75rem; font-weight:700; }
+.score-low    { display:inline-block; padding:.15rem .55rem; border-radius:9999px; background:#fee2e2; color:#991b1b; font-size:.75rem; font-weight:700; }
+
+/* ══════════════════════════════════════════════════
+   LOADING SPINNER
+   ══════════════════════════════════════════════════ */
+.loader {
+  width: 42px;
+  height: 42px;
+  border: 4px solid #e2e8f0;
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ══════════════════════════════════════════════════
+   GRADUATION CAP ANIMATION (header icon)
+   ══════════════════════════════════════════════════ */
+.grad-cap-icon {
+  font-size: 1.6rem;
+  display: inline-block;
+  animation: float 3s ease-in-out infinite;
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-5px); }
+}
+
+/* ══════════════════════════════════════════════════
+   SMOOTH GLOBAL TRANSITIONS
+   ══════════════════════════════════════════════════ */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+/* Alpine x-show uses display: none; add smooth opacity via
+   Alpine's x-transition where needed in HTML. */
+
+/* ══════════════════════════════════════════════════
+   SCROLLBAR (Webkit) – subtle
+   ══════════════════════════════════════════════════ */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #f1f5f9; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* ══════════════════════════════════════════════════
+   MODAL FORM — Add Student
+   ══════════════════════════════════════════════════ */
+
+/* Form field group wrapper */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+}
+
+/* Field label */
+.form-label {
+  font-size: .72rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+/* Shared input / select style inside the modal form */
+.form-input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: .625rem;
+  padding: .5rem .75rem;
+  font-size: .82rem;
+  color: #1e293b;
+  outline: none;
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+.form-input:focus {
+  background: #fff;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99,102,241,.12);
+}
+.form-input::placeholder { color: #94a3b8; }
+
+/* Fieldset legend divider line */
+fieldset { border: none; padding: 0; margin: 0; }
+
+/* Submit button spinner (small white ring) */
+.btn-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255,255,255,.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin .6s linear infinite;
+  flex-shrink: 0;
+}

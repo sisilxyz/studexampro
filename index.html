@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Student Exam Scores Dashboard</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Alpine.js CDN (defer keeps it from blocking render) -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+
+  <!-- PapaParse – parses CSV client-side -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <!-- Custom styles -->
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- Tailwind custom config: soft pastel palette -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            pastelBlue:   '#DBEAFE',
+            pastelGreen:  '#D1FAE5',
+            pastelYellow: '#FEF9C3',
+            pastelPink:   '#FCE7F3',
+            pastelPurple: '#EDE9FE',
+            pastelOrange: '#FFEDD5',
+            accent:       '#6366F1',
+            accentDark:   '#4F46E5',
+          },
+          fontFamily: {
+            sans: ['"Inter"', 'system-ui', 'sans-serif'],
+          },
+        },
+      },
+    };
+  </script>
+
+  <!-- Google Font: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+</head>
+
+<body class="bg-slate-50 font-sans text-slate-700 antialiased">
+
+  <!-- =============================================
+       ROOT Alpine.js component — x-data binds the
+       entire page to the `dashboard` store defined
+       in script.js via Alpine.data()
+       ============================================= -->
+  <div x-data="dashboard" x-init="init()">
+
+    <!-- ── TOP NAVIGATION BAR ── -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
+      <div class="max-w-screen-xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
+        <!-- Brand -->
+        <div class="flex items-center gap-3 min-w-0">
+          <!-- Animated graduation cap icon (pure CSS) -->
+          <div class="grad-cap-icon flex-shrink-0" aria-hidden="true">🎓</div>
+          <div class="min-w-0">
+            <h1 class="text-base sm:text-lg font-bold text-slate-800 leading-tight truncate">
+              Student Exam Scores
+            </h1>
+            <p class="text-xs text-slate-400 hidden sm:block">Academic Performance Analytics</p>
+          </div>
+        </div>
+
+        <!-- Right side: record count + Add Student button -->
+        <div class="flex items-center gap-3 flex-shrink-0">
+          <div class="text-xs font-semibold bg-pastelPurple text-accent px-3 py-1.5 rounded-full hidden sm:block">
+            <span x-text="filtered.length"></span> / <span x-text="all.length"></span> students
+          </div>
+
+          <!-- Export CSV button — downloads this.all as CSV -->
+          <button @click="exportCSV()"
+                  x-show="all.length"
+                  class="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-xl
+                         bg-pastelGreen text-green-700 hover:bg-green-100 active:scale-95
+                         transition-all duration-150 border border-green-200">
+            <span class="text-base leading-none">⬇</span>
+            <span class="hidden sm:inline">Export CSV</span>
+          </button>
+
+          <!-- Opens the Add Student modal -->
+          <button @click="openModal()"
+                  class="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl
+                         bg-accent text-white hover:bg-accentDark active:scale-95
+                         transition-all duration-150 shadow-sm">
+            <span class="text-base leading-none">＋</span>
+            <span class="hidden sm:inline">Add Student</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- ── MAIN CONTENT ── -->
+    <main class="max-w-screen-xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+
+      <!-- Loading skeleton -->
+      <div x-show="loading" class="flex flex-col items-center justify-center py-24 gap-4 text-slate-400">
+        <div class="loader"></div>
+        <p class="text-sm animate-pulse">Loading dataset…</p>
+      </div>
+
+      <!-- Error state -->
+      <div x-show="error" class="rounded-2xl bg-red-50 border border-red-200 p-6 text-center text-red-600 text-sm">
+        ⚠️ <span x-text="error || ''"></span>
+      </div>
+
+      <!-- Dashboard content — always in DOM so <canvas> elements exist for Chart.js;
+           visibility controlled by x-show (not x-if) to avoid timing issues -->
+      <div x-show="!loading && !error" class="space-y-6">
+
+          <!-- ── FILTER / SORT BAR ── -->
+          <section aria-label="Filters and sorting"
+                   class="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5">
+            <div class="flex flex-wrap gap-3 items-end">
+
+              <!-- Search by student ID -->
+              <div class="flex flex-col gap-1 flex-1 min-w-[140px]">
+                <label class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Student ID</label>
+                <input type="text"
+                       x-model.debounce.300ms="filters.search"
+                       placeholder="e.g. S1005"
+                       class="filter-input" />
+              </div>
+
+              <!-- Gender filter -->
+              <div class="flex flex-col gap-1 min-w-[120px]">
+                <label class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Gender</label>
+                <select x-model="filters.gender" class="filter-input">
+                  <option value="">All</option>
+                  <option>Male</option>
+                  <option>Female</option>
+                </select>
+              </div>
+
+              <!-- Income level filter -->
+              <div class="flex flex-col gap-1 min-w-[130px]">
+                <label class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Income Level</label>
+                <select x-model="filters.income" class="filter-input">
+                  <option value="">All</option>
+                  <option>Low</option>
+                  <option>Medium</option>
+                  <option>High</option>
+                </select>
+              </div>
+
+              <!-- Health filter -->
+              <div class="flex flex-col gap-1 min-w-[120px]">
+                <label class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Health</label>
+                <select x-model="filters.health" class="filter-input">
+                  <option value="">All</option>
+                  <option>Excellent</option>
+                  <option>Good</option>
+                  <option>Fair</option>
+                  <option>Poor</option>
+                </select>
+              </div>
+
+              <!-- Parental education filter -->
+              <div class="flex flex-col gap-1 min-w-[150px]">
+                <label class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Parental Edu.</label>
+                <select x-model="filters.parentEdu" class="filter-input">
+                  <option value="">All</option>
+                  <option>Primary</option>
+                  <option>Secondary</option>
+                  <option>Graduate</option>
+                  <option>Postgraduate</option>
+                </select>
+              </div>
+
+              <!-- Sort by -->
+              <div class="flex flex-col gap-1 min-w-[150px]">
+                <label class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Sort By</label>
+                <select x-model="sortBy" class="filter-input">
+                  <option value="exam_score_desc">Exam Score ↓</option>
+                  <option value="exam_score_asc">Exam Score ↑</option>
+                  <option value="attendance_desc">Attendance ↓</option>
+                  <option value="attendance_asc">Attendance ↑</option>
+                  <option value="study_hours_desc">Study Hours ↓</option>
+                  <option value="study_hours_asc">Study Hours ↑</option>
+                  <option value="age_asc">Age ↑</option>
+                  <option value="age_desc">Age ↓</option>
+                </select>
+              </div>
+
+              <!-- Reset button -->
+              <button @click="resetFilters()"
+                      class="px-4 py-2 text-sm font-semibold rounded-xl bg-pastelPurple text-accent
+                             hover:bg-accent hover:text-white transition-colors duration-200 flex-shrink-0">
+                Reset
+              </button>
+            </div>
+          </section>
+
+          <!-- ── KPI STAT CARDS ── -->
+          <section aria-label="Key performance indicators">
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+              <template x-for="card in statCards" :key="card.label">
+                <div class="stat-card" :class="card.bg">
+                  <p class="text-2xl sm:text-3xl font-bold leading-none" :class="card.color" x-text="card.value"></p>
+                  <p class="text-xs font-semibold text-slate-500 mt-1 leading-tight" x-text="card.label"></p>
+                </div>
+              </template>
+            </div>
+          </section>
+
+          <!-- ── CHARTS ROW 1 ── -->
+          <section aria-label="Score distribution charts">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+              <!-- Score Distribution histogram -->
+              <div class="chart-card">
+                <h2 class="chart-title">Exam Score Distribution</h2>
+                <p class="chart-subtitle">How scores spread across all filtered students</p>
+                <div class="chart-wrap">
+                  <canvas id="chartScoreDist"></canvas>
+                </div>
+              </div>
+
+              <!-- Gender breakdown grouped bar -->
+              <div class="chart-card">
+                <h2 class="chart-title">Score by Gender</h2>
+                <p class="chart-subtitle">Avg exam score &amp; student count per gender</p>
+                <div class="chart-wrap">
+                  <canvas id="chartGender"></canvas>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ── CHARTS ROW 2 ── -->
+          <section aria-label="Academic factor charts">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+              <!-- Attendance vs Score scatter -->
+              <div class="chart-card">
+                <h2 class="chart-title">Attendance vs Exam Score</h2>
+                <p class="chart-subtitle">Each dot is one student</p>
+                <div class="chart-wrap">
+                  <canvas id="chartAttendance"></canvas>
+                </div>
+              </div>
+
+              <!-- Study hours vs Score scatter -->
+              <div class="chart-card">
+                <h2 class="chart-title">Study Hours vs Exam Score</h2>
+                <p class="chart-subtitle">Monthly study hours correlated with score</p>
+                <div class="chart-wrap">
+                  <canvas id="chartStudy"></canvas>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ── CHARTS ROW 3 ── -->
+          <section aria-label="Demographic and contextual charts">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+
+              <!-- Income level bar -->
+              <div class="chart-card">
+                <h2 class="chart-title">Avg Score by Income Level</h2>
+                <p class="chart-subtitle">Family income vs academic result</p>
+                <div class="chart-wrap">
+                  <canvas id="chartIncome"></canvas>
+                </div>
+              </div>
+
+              <!-- Health status bar -->
+              <div class="chart-card">
+                <h2 class="chart-title">Avg Score by Health Status</h2>
+                <p class="chart-subtitle">Student health and performance</p>
+                <div class="chart-wrap">
+                  <canvas id="chartHealth"></canvas>
+                </div>
+              </div>
+
+              <!-- Parental education bar -->
+              <div class="chart-card">
+                <h2 class="chart-title">Avg Score by Parental Education</h2>
+                <p class="chart-subtitle">Does parents' education level matter?</p>
+                <div class="chart-wrap">
+                  <canvas id="chartParentEdu"></canvas>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ── DATA TABLE ── -->
+          <section aria-label="Student data table">
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+              <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                <div>
+                  <h2 class="font-bold text-slate-800 text-sm sm:text-base">Student Records</h2>
+                  <p class="text-xs text-slate-400 mt-0.5">
+                    Showing <span class="font-semibold text-accent" x-text="tableRows.length"></span> of
+                    <span x-text="filtered.length"></span> filtered results
+                  </p>
+                </div>
+                <!-- Page size -->
+                <select x-model.number="pageSize" class="filter-input text-xs w-auto px-2 py-1">
+                  <option value="10">10 / page</option>
+                  <option value="25">25 / page</option>
+                  <option value="50">50 / page</option>
+                </select>
+              </div>
+
+              <!-- Scrollable table -->
+              <div class="overflow-x-auto">
+                <table class="w-full text-xs sm:text-sm">
+                  <thead>
+                    <tr class="bg-slate-50 text-slate-500 uppercase text-xs tracking-wide">
+                      <th class="th-cell">ID</th>
+                      <th class="th-cell">Age</th>
+                      <th class="th-cell">Gender</th>
+                      <th class="th-cell">Income</th>
+                      <th class="th-cell">Health</th>
+                      <th class="th-cell">Attendance %</th>
+                      <th class="th-cell">Study Hrs</th>
+                      <th class="th-cell">Prev Score</th>
+                      <th class="th-cell">Exam Score</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template x-for="(row, i) in tableRows" :key="row.student_id">
+                      <tr class="table-row-hover border-b border-slate-50">
+                        <td class="td-cell font-mono text-accent" x-text="row.student_id"></td>
+                        <td class="td-cell" x-text="row.age"></td>
+                        <td class="td-cell">
+                          <span :class="row.gender === 'Female' ? 'badge-pink' : 'badge-blue'"
+                                x-text="row.gender"></span>
+                        </td>
+                        <td class="td-cell" x-text="row.family_income_level"></td>
+                        <td class="td-cell">
+                          <span :class="healthBadge(row.health)" x-text="row.health"></span>
+                        </td>
+                        <td class="td-cell">
+                          <!-- Inline progress bar for attendance -->
+                          <div class="flex items-center gap-2">
+                            <div class="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                              <div class="h-full rounded-full bg-accent transition-all"
+                                   :style="`width:${row.attendance_percentage}%`"></div>
+                            </div>
+                            <span x-text="row.attendance_percentage + '%'"></span>
+                          </div>
+                        </td>
+                        <td class="td-cell" x-text="row.study_hours_per_month"></td>
+                        <td class="td-cell" x-text="row.previous_semester_score"></td>
+                        <td class="td-cell font-bold">
+                          <span :class="scoreBadge(row.exam_score)" x-text="row.exam_score"></span>
+                        </td>
+                      </tr>
+                    </template>
+                    <!-- Empty state -->
+                    <tr x-show="tableRows.length === 0">
+                      <td colspan="9" class="text-center py-10 text-slate-400 text-sm">
+                        No students match the current filters.
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- Pagination -->
+              <div class="px-5 py-3 flex items-center justify-between border-t border-slate-100 text-xs text-slate-500">
+                <button @click="prevPage()"
+                        :disabled="page === 1"
+                        class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-pastelPurple hover:text-accent
+                               disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                  ← Prev
+                </button>
+                <span>Page <span class="font-bold text-slate-700" x-text="page"></span>
+                      of <span x-text="totalPages"></span></span>
+                <button @click="nextPage()"
+                        :disabled="page >= totalPages"
+                        class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-pastelPurple hover:text-accent
+                               disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                  Next →
+                </button>
+              </div>
+            </div>
+          </section>
+
+      </div><!-- end dashboard content -->
+
+    </main>
+
+    <!-- ── FOOTER ── -->
+    <footer class="text-center text-xs text-slate-400 py-6 border-t border-slate-100 mt-4">
+      Data source: <code class="font-mono text-slate-500">student_exam_scores_dataset.csv</code>
+      · Built with Tailwind CSS, Alpine.js &amp; Chart.js
+    </footer>
+
+    <!-- ══════════════════════════════════════════════════════
+         ADD STUDENT MODAL
+         Controlled by Alpine state: showModal, form, formErrors,
+         formLoading, formSuccess
+         ══════════════════════════════════════════════════════ -->
+    <div x-show="showModal"
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-150"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         class="fixed inset-0 z-[100] flex items-center justify-center p-4"
+         style="display:none">
+
+      <!-- Backdrop -->
+      <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+           @click="closeModal()"></div>
+
+      <!-- Modal panel -->
+      <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh]
+                  overflow-y-auto border border-slate-100"
+           @click.stop>
+
+        <!-- Modal header -->
+        <div class="sticky top-0 bg-white px-6 py-4 border-b border-slate-100 flex items-center justify-between z-10">
+          <div>
+            <h2 class="font-bold text-slate-800 text-base">Add New Student</h2>
+            <p class="text-xs text-slate-400 mt-0.5">Data tersimpan di sesi ini · Export CSV untuk menyimpan permanen</p>
+          </div>
+          <button @click="closeModal()"
+                  class="text-slate-400 hover:text-slate-600 text-xl leading-none transition-colors"
+                  aria-label="Close modal">✕</button>
+        </div>
+
+        <!-- Success banner -->
+        <div x-show="formSuccess"
+             x-transition
+             class="mx-6 mt-4 px-4 py-3 rounded-xl bg-green-50 border border-green-200
+                    text-green-700 text-sm font-medium flex items-center gap-2">
+          ✅ Student <strong x-text="formSuccess"></strong> berhasil ditambahkan!
+        </div>
+
+        <!-- Error banner -->
+        <div x-show="formErrors.length"
+             class="mx-6 mt-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm space-y-0.5">
+          <p class="font-semibold mb-1">Mohon perbaiki error berikut:</p>
+          <template x-for="err in formErrors" :key="err">
+            <p class="flex items-start gap-1">⚠ <span x-text="err"></span></p>
+          </template>
+        </div>
+
+        <!-- Form body -->
+        <form @submit.prevent="submitStudent()" class="px-6 py-5 space-y-5">
+
+          <!-- Section: Personal Info -->
+          <fieldset class="space-y-3">
+            <legend class="text-xs font-bold text-slate-500 uppercase tracking-wider pb-1 border-b border-slate-100 w-full">
+              👤 Personal Information
+            </legend>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+
+              <div class="form-group">
+                <label class="form-label">Age</label>
+                <input type="number" x-model.number="form.age"
+                       min="15" max="60" placeholder="18 – 60"
+                       class="form-input" required />
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Gender</label>
+                <select x-model="form.gender" class="form-input" required>
+                  <option value="">Select…</option>
+                  <option>Male</option>
+                  <option>Female</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Health</label>
+                <select x-model="form.health" class="form-input" required>
+                  <option value="">Select…</option>
+                  <option>Excellent</option>
+                  <option>Good</option>
+                  <option>Fair</option>
+                  <option>Poor</option>
+                </select>
+              </div>
+            </div>
+          </fieldset>
+
+          <!-- Section: Background -->
+          <fieldset class="space-y-3">
+            <legend class="text-xs font-bold text-slate-500 uppercase tracking-wider pb-1 border-b border-slate-100 w-full">
+              🏠 Family Background
+            </legend>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+              <div class="form-group">
+                <label class="form-label">Family Income Level</label>
+                <select x-model="form.family_income_level" class="form-input" required>
+                  <option value="">Select…</option>
+                  <option>Low</option>
+                  <option>Medium</option>
+                  <option>High</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Parental Education Level</label>
+                <select x-model="form.parental_education_level" class="form-input" required>
+                  <option value="">Select…</option>
+                  <option>Primary</option>
+                  <option>Secondary</option>
+                  <option>Graduate</option>
+                  <option>Postgraduate</option>
+                </select>
+              </div>
+            </div>
+          </fieldset>
+
+          <!-- Section: Academic Activity -->
+          <fieldset class="space-y-3">
+            <legend class="text-xs font-bold text-slate-500 uppercase tracking-wider pb-1 border-b border-slate-100 w-full">
+              📚 Academic Activity
+            </legend>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+              <div class="form-group">
+                <label class="form-label">Attendance (%)</label>
+                <input type="number" x-model.number="form.attendance_percentage"
+                       min="0" max="100" placeholder="0 – 100"
+                       class="form-input" required />
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Group Study Frequency</label>
+                <select x-model="form.group_study_frequency" class="form-input" required>
+                  <option value="">Select…</option>
+                  <option>Never</option>
+                  <option>Rarely</option>
+                  <option>Sometimes</option>
+                  <option>Often</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Study Hours / Month</label>
+                <input type="number" x-model.number="form.study_hours_per_month"
+                       min="0" max="300" placeholder="0 – 300"
+                       class="form-input" required />
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Library Hours / Month</label>
+                <input type="number" x-model.number="form.library_hours_per_month"
+                       min="0" max="200" placeholder="0 – 200"
+                       class="form-input" required />
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Online Usage / Month (hrs)</label>
+                <input type="number" x-model.number="form.online_usage_per_month"
+                       min="0" max="300" placeholder="0 – 300"
+                       class="form-input" required />
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Previous Semester Score</label>
+                <input type="number" x-model.number="form.previous_semester_score"
+                       min="0" max="100" placeholder="0 – 100"
+                       class="form-input" required />
+              </div>
+            </div>
+          </fieldset>
+
+          <!-- Section: Lifestyle -->
+          <fieldset class="space-y-3">
+            <legend class="text-xs font-bold text-slate-500 uppercase tracking-wider pb-1 border-b border-slate-100 w-full">
+              🏃 Lifestyle &amp; Activities
+            </legend>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+
+              <div class="form-group">
+                <label class="form-label">Sports</label>
+                <select x-model="form.sports" class="form-input" required>
+                  <option value="">Select…</option>
+                  <option>None</option>
+                  <option>Occasional</option>
+                  <option>Regular</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Extracurricular Activities</label>
+                <select x-model="form.extracurricular_activities" class="form-input" required>
+                  <option value="">Select…</option>
+                  <option>None</option>
+                  <option>Few</option>
+                  <option>Active</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Volunteering</label>
+                <select x-model="form.volunteering" class="form-input" required>
+                  <option value="">Select…</option>
+                  <option>Yes</option>
+                  <option>No</option>
+                </select>
+              </div>
+            </div>
+          </fieldset>
+
+          <!-- Section: Exam Score -->
+          <fieldset class="space-y-3">
+            <legend class="text-xs font-bold text-slate-500 uppercase tracking-wider pb-1 border-b border-slate-100 w-full">
+              📝 Exam Result
+            </legend>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div class="form-group">
+                <label class="form-label">Exam Score</label>
+                <input type="number" x-model.number="form.exam_score"
+                       min="0" max="100" placeholder="0 – 100"
+                       class="form-input" required />
+              </div>
+            </div>
+          </fieldset>
+
+          <!-- Action buttons -->
+          <div class="flex items-center justify-end gap-3 pt-2 border-t border-slate-100">
+            <button type="button" @click="closeModal()"
+                    class="px-5 py-2 text-sm font-semibold rounded-xl bg-slate-100
+                           text-slate-600 hover:bg-slate-200 transition-colors">
+              Batal
+            </button>
+            <button type="submit"
+                    class="px-6 py-2 text-sm font-semibold rounded-xl bg-accent text-white
+                           hover:bg-accentDark transition-all flex items-center gap-2">
+              💾 Simpan Data
+            </button>
+          </div>
+
+        </form>
+      </div><!-- end modal panel -->
+    </div><!-- end modal -->
+
+  </div><!-- end x-data="dashboard" -->
+
+  <!-- Main script -->
+  <script src="script.js"></script>
+</body>
+</html>
